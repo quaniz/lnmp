@@ -1,0 +1,14 @@
+# Downloaded source archives, extracted software, and offline binaries.
+/src/*
+
+# Build patches are part of the installer source and must remain versioned.
+!/src/patch/
+!/src/patch/**
+
+# Optional checksum manifest is source-controlled when provided.
+!/src/checksums.sha256
+
+# Local installation and diagnostic artifacts.
+/php-configure-error.log
+*.log
+.DS_Store
