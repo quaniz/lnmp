@@ -234,12 +234,15 @@ case "${Stack}" in
     php)
         Run_Logged /root/php-install.log Install_Only_PHP
         ;;
+    phpmyadmin)
+        Run_Logged /root/phpmyadmin-install.log Install_Only_PhpMyAdmin
+        ;;
     mphp)
         Install_Multiplephp
         ;;
     *)
         Echo_Red "Usage: $0 {lnmp|lnmpa|lamp}"
-        Echo_Red "Usage: $0 {nginx|db|php|mphp}"
+        Echo_Red "Usage: $0 {nginx|db|php|phpmyadmin|mphp}"
         ;;
 esac
 

@@ -80,9 +80,11 @@ Sodium加密库扩展模块安装/卸载执行：./addons.sh {install|uninstall}
 
 其他常用脚本：
 * 仅安装管理命令：执行 `./install-component.sh lnmp`，只会安装 `/bin/lnmp` 命令，不会安装 MySQL、PHP、Nginx 或相关依赖。
-* 指定版本安装：执行 `./install-component.sh <mysql|php|nginx> <版本号>`，例如 `./install-component.sh mysql 8.4.8 --binary`、`./install-component.sh php 8.3.30` 或 `./install-component.sh nginx 1.28.0`。版本号必须为 `x.y.z` 格式；可先增加 `--dry-run` 检查参数，增加 `-y` 跳过最终按键确认。PHP 会作为主 PHP-FPM 服务安装到 `/usr/local/php`，除旧版 PHP 5.2 外，不要求预先安装 MySQL 或 Nginx。
+* 指定版本安装：执行 `./install-component.sh <mysql|php|nginx|phpmyadmin> <版本号>`，例如 `./install-component.sh mysql 8.4.8 --binary`、`./install-component.sh php 8.3.30`、`./install-component.sh nginx 1.28.0` 或 `./install-component.sh phpmyadmin 5.2.3`。版本号必须为 `x.y.z` 格式；可先增加 `--dry-run` 检查参数，增加 `-y` 跳过最终按键确认。PHP 会作为主 PHP-FPM 服务安装到 `/usr/local/php`，除旧版 PHP 5.2 外，不要求预先安装 MySQL 或 Nginx。phpMyAdmin 只部署到默认网站目录，不会自动安装 PHP、数据库或 Web 服务；已有 phpMyAdmin 会先改名备份。
 * 安装状态检查：执行 `./install-component.sh status`，无需 root 权限，可检查 lnmp 管理命令以及 MySQL/MariaDB、PHP、Nginx 的安装路径和版本。
-* PHP 8 独立安装在现代系统上使用系统 FreeType/HarfBuzz 与 glibc iconv，避免 `/usr/local` 中旧版库影响系统动态库；检测到 LNMP 旧配置时会将其改名为带 `lnmp-disabled` 的可恢复备份。系统仓库没有可用 libzip 时，会自动使用 `src/libzip-1.3.2.tar.xz` 编译安装。
+* 本地软件包检查：执行 `./install-component.sh sources`（或 `./install-component.sh src`），无需 root 权限，可列出 `src` 顶层缓存的软件名称、版本、大小和文件名；大小显示为 `EMPTY` 的文件表示下载未完成，安装时不会作为有效缓存使用。
+* MySQL 8.4 使用 `innodb_redo_log_capacity` 并采用默认 ROW binlog 格式，不再写入已废弃的 `innodb_log_file_size`、`innodb_log_files_in_group` 和 `binlog_format`。数据库安全初始化与源码清理可重复执行，不会因匿名用户、测试库已不存在或删除当前工作目录而产生误报。
+* PHP 8 独立安装会先检查系统 FreeType/HarfBuzz 的运行时 ABI，而不是只检查软件包是否存在；如动态加载的 FreeType 缺少 HarfBuzz 所需符号，会自动改用项目自带的 FreeType 2.13。检测到 LNMP 旧配置时会将其改名为带 `lnmp-disabled` 的可恢复备份。系统仓库没有可用 libzip 时，会自动使用 `src/libzip-1.3.2.tar.xz` 编译安装。
 * 可选1，多PHP版本安装执行： ./install.sh mphp  可以安装多个PHP版本 ，只支持LNMP模式，lnmp vhost add时进行选择或使用时需要将nginx虚拟主机配置文件里的include enable-php.conf替换为 include enable-php8.4.conf 即可前面的8.4换成你刚才安装的PHP的大版本号5.*、7.*或8.*之类的。
 * 可选2，数据库安装执行： ./install.sh db  可以直接单独安装MySQL或MariaDB数据库。
 * 可选3，Nginx安装执行： ./install.sh nginx 可以直接单独安装Nginx。

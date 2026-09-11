@@ -7,16 +7,19 @@ script_dir=$(cd "$(dirname "$0")" && pwd)
 usage()
 {
     cat <<'EOF'
-Usage: ./install-component.sh <mysql|php|nginx> <version> [options]
+Usage: ./install-component.sh <mysql|php|nginx|phpmyadmin> <version> [options]
        ./install-component.sh lnmp [--dry-run]
        ./install-component.sh status
+       ./install-component.sh sources
 
 Examples:
   ./install-component.sh nginx 1.28.0
   ./install-component.sh mysql 8.4.8 --binary
   ./install-component.sh php 8.3.30
+  ./install-component.sh phpmyadmin 5.2.3
   ./install-component.sh lnmp
   ./install-component.sh status
+  ./install-component.sh sources
   ./install-component.sh nginx 1.28.0 --yes --dry-run
 
 Options:
@@ -27,11 +30,14 @@ Options:
   -h, --help      Show this help message.
 
 The lnmp target only installs the management command; it installs no services.
-The status target reports installed component versions; it changes nothing.
+The status target reports installed component versions, including phpMyAdmin; it changes nothing.
+The sources target lists locally cached software archives in src; it changes nothing.
 PHP is installed as the main PHP-FPM service and does not require MySQL or Nginx.
 PHP 5.2 is the exception and still requires MySQL because of its legacy build options.
+phpMyAdmin only deploys its web files; it does not install PHP, MySQL, or Nginx.
 Supported MySQL series: 5.1, 5.5, 5.6, 5.7, 8.0, 8.4.
 Supported PHP series:   5.2-5.6, 7.0-7.4, 8.0-8.5.
+phpMyAdmin versions use the x.y.z format, for example 5.2.3.
 EOF
 }
 
@@ -59,6 +65,76 @@ print_binary_version()
     fi
 }
 
+print_source_inventory()
+{
+    local Archive
+    local Archive_Name
+    local Archive_Size
+    local Software
+    local Source_Dir="${script_dir}/src"
+    local Stem
+    local Version
+    local Found=0
+
+    if [ ! -d "${Source_Dir}" ]; then
+        echo "Source cache directory not found: ${Source_Dir}"
+        return 1
+    fi
+
+    printf '%-18s %-14s %-9s %s\n' 'SOFTWARE' 'VERSION' 'SIZE' 'FILE'
+    printf '%-18s %-14s %-9s %s\n' '------------------' '--------------' '---------' '----'
+    while IFS= read -r Archive; do
+        [ -n "${Archive}" ] || continue
+        Found=1
+        Archive_Name=${Archive##*/}
+        Stem=${Archive_Name}
+        Stem=${Stem%.tar.gz}
+        Stem=${Stem%.tar.bz2}
+        Stem=${Stem%.tar.xz}
+        Stem=${Stem%.tgz}
+        Stem=${Stem%.zip}
+        Stem=${Stem%.phar}
+        Stem=${Stem%.rpm}
+        Version=$(printf '%s\n' "${Stem}" | grep -Eo '[0-9]+([._][0-9]+){1,3}[A-Za-z]*' | head -n 1)
+        Version=${Version//_/.}
+        [ -n "${Version}" ] || Version='unknown'
+
+        case "${Stem}" in
+            phpMyAdmin-*) Software='phpMyAdmin' ;;
+            mysql-*) Software='MySQL' ;;
+            mariadb-*) Software='MariaDB' ;;
+            php-*) Software='PHP' ;;
+            nginx-*) Software='Nginx' ;;
+            composer*) Software='Composer'; [ "${Version}" = 'unknown' ] && Version='current' ;;
+            boost_*) Software='Boost' ;;
+            icu4c-*) Software='ICU' ;;
+            p) Software='PHP Prober' ;;
+            *)
+                if [ "${Version}" != 'unknown' ]; then
+                    Software=${Stem%%-${Version}*}
+                    [ "${Software}" = "${Stem}" ] && Software=${Stem%%_${Version//./_}*}
+                else
+                    Software=${Stem}
+                fi
+                ;;
+        esac
+
+        if [ -s "${Archive}" ]; then
+            Archive_Size=$(du -h "${Archive}" | awk '{print $1}')
+        else
+            Archive_Size='EMPTY'
+        fi
+        printf '%-18s %-14s %-9s %s\n' "${Software}" "${Version}" "${Archive_Size}" "${Archive_Name}"
+    done < <(find "${Source_Dir}" -maxdepth 1 -type f \( \
+        -name '*.tar.gz' -o -name '*.tar.bz2' -o -name '*.tar.xz' -o \
+        -name '*.tgz' -o -name '*.zip' -o -name '*.phar' -o -name '*.rpm' \
+        \) -print | LC_ALL=C sort)
+
+    if [ ${Found} -eq 0 ]; then
+        echo '(no local software archives found)'
+    fi
+}
+
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
     usage
     exit 0
@@ -70,7 +146,7 @@ component=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
 shift
 
 version=
-if [ "$component" != lnmp ] && [ "$component" != status ]; then
+if [ "$component" != lnmp ] && [ "$component" != status ] && [ "$component" != sources ] && [ "$component" != src ]; then
     [ $# -ge 1 ] || die "A version is required for $component."
     version=$1
     shift
@@ -125,6 +201,12 @@ case "$component" in
         [ "$auto_install" = n ] || die "--yes does not apply to status."
         [ "$dry_run" = n ] || die "--dry-run does not apply to status."
         ;;
+    sources|src)
+        component=sources
+        [ -z "$binary_mode" ] || die "--binary/--source only apply to MySQL."
+        [ "$auto_install" = n ] || die "--yes does not apply to sources."
+        [ "$dry_run" = n ] || die "--dry-run does not apply to sources."
+        ;;
     mysql)
         case "$version" in
             5.1.*) selector=1 ;;
@@ -171,8 +253,13 @@ case "$component" in
         installer_action=nginx
         override_name=LNMP_NGINX_VERSION_OVERRIDE
         ;;
+    phpmyadmin)
+        [ -z "$binary_mode" ] || die "--binary/--source only apply to MySQL."
+        installer_action=phpmyadmin
+        override_name=LNMP_PHPMYADMIN_VERSION_OVERRIDE
+        ;;
     *)
-        die "Unsupported component '$component'. Use lnmp, status, mysql, php, or nginx."
+        die "Unsupported component '$component'. Use lnmp, status, mysql, php, nginx, or phpmyadmin."
         ;;
 esac
 
@@ -196,6 +283,11 @@ if [ "$dry_run" = y ]; then
     exit 0
 fi
 
+if [ "$component" = sources ]; then
+    print_source_inventory
+    exit $?
+fi
+
 if [ "$component" = status ]; then
     if [ -x /bin/lnmp ]; then
         echo "lnmp:    installed (/bin/lnmp)"
@@ -215,6 +307,16 @@ if [ "$component" = status ]; then
 
     print_binary_version php /usr/local/php/bin/php -r 'echo PHP_VERSION;'
     print_binary_version nginx /usr/local/nginx/sbin/nginx -v
+    if [ -s "${script_dir}/lnmp.conf" ]; then
+        Default_Website_Dir=$(awk -F"'" '/^Default_Website_Dir=/ {print $2; exit}' "${script_dir}/lnmp.conf")
+        if [ -s "${Default_Website_Dir}/phpmyadmin/.lnmp-version" ]; then
+            printf '%-9s %s\n' 'phpMyAdmin:' "$(head -n 1 "${Default_Website_Dir}/phpmyadmin/.lnmp-version")"
+        elif [ -d "${Default_Website_Dir}/phpmyadmin" ]; then
+            printf '%-9s %s\n' 'phpMyAdmin:' "installed (${Default_Website_Dir}/phpmyadmin), version unavailable"
+        else
+            printf '%-9s %s\n' 'phpMyAdmin:' 'not installed'
+        fi
+    fi
     exit 0
 fi
 

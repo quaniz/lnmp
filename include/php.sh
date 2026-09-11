@@ -7,6 +7,8 @@ Run_Configure()
     local Configure_Use_System_Iconv="n"
     local Configure_Status
     local Configure_Error_Log="${cur_dir}/php-configure-error.log"
+    local Configure_LD_LIBRARY_PATH
+    local Configure_LDFLAGS
     local Configure_Args=()
 
     for Configure_Arg in "$@"; do
@@ -32,7 +34,18 @@ Run_Configure()
     printf '%q ' "$@"
     printf '\n'
     echo "============================================================================"
-    CPPFLAGS="${Configure_CPPFLAGS}" "$@"
+    if [ -n "${LNMP_PHP_FREETYPE_LIBRARY_PATH:-}" ]; then
+        Configure_LD_LIBRARY_PATH="${LNMP_PHP_FREETYPE_LIBRARY_PATH}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+        Configure_LDFLAGS="-Wl,-rpath,${LNMP_PHP_FREETYPE_LIBRARY_PATH}${LDFLAGS:+ ${LDFLAGS}}"
+        echo "PHP configure FreeType runtime path: ${LNMP_PHP_FREETYPE_LIBRARY_PATH}"
+        LD_LIBRARY_PATH="${Configure_LD_LIBRARY_PATH}" LDFLAGS="${Configure_LDFLAGS}" CPPFLAGS="${Configure_CPPFLAGS}" "$@"
+    elif [ "${LNMP_USE_SYSTEM_FREETYPE:-n}" = "y" ]; then
+        # Do not let a shell-level library search path override the system
+        # FreeType that passed the HarfBuzz ABI preflight above.
+        env -u LD_LIBRARY_PATH -u LIBRARY_PATH CPPFLAGS="${Configure_CPPFLAGS}" "$@"
+    else
+        CPPFLAGS="${Configure_CPPFLAGS}" "$@"
+    fi
     Configure_Status=$?
     if [ ${Configure_Status} -ne 0 ]; then
         if [ -s config.log ]; then

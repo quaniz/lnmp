@@ -82,13 +82,12 @@ EOF
     [ $? -eq 0 ] && echo " ... Success." || echo " ... Failed!"
     echo "Remove anonymous users..."
     Do_Query "DELETE FROM mysql.user WHERE User='';"
-    Do_Query "DROP USER ''@'%';"
     [ $? -eq 0 ] && echo " ... Success." || echo " ... Failed!"
     echo "Disallow root login remotely..."
     Do_Query "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
     [ $? -eq 0 ] && echo " ... Success." || echo " ... Failed!"
     echo "Remove test database..."
-    Do_Query "DROP DATABASE test;"
+    Do_Query "DROP DATABASE IF EXISTS test;"
     [ $? -eq 0 ] && echo " ... Success." || echo " ... Failed!"
     echo "Reload privilege tables..."
     Do_Query "FLUSH PRIVILEGES;"
@@ -100,6 +99,9 @@ EOF
 
 MySQL_Opt()
 {
+    local Redo_Log_Capacity
+    local Redo_Log_File_Size
+
     if [[ ${MemTotal} -gt 1024 && ${MemTotal} -lt 2048 ]]; then
         sed -i "s#^key_buffer_size.*#key_buffer_size = 32M#" /etc/my.cnf
         sed -i "s#^table_open_cache.*#table_open_cache = 128#" /etc/my.cnf
@@ -172,6 +174,20 @@ MySQL_Opt()
         sed -i "s#^innodb_buffer_pool_size.*#innodb_buffer_pool_size = 4096M#" /etc/my.cnf
         sed -i "s#^innodb_log_file_size.*#innodb_log_file_size = 1024M#" /etc/my.cnf
         sed -i "s#^performance_schema_max_table_instances.*#performance_schema_max_table_instances = 10000#" /etc/my.cnf
+    fi
+
+    # MySQL 8.4 deprecates binlog_format and the old per-file redo log
+    # settings. Preserve the previous effective capacity of two log files.
+    if [[ "${DBSelect:-}" = "11" || "${Mysql_Ver:-}" =~ ^mysql-8\.4\. || "${mysql_version:-}" =~ ^8\.4\. ]]; then
+        Redo_Log_File_Size=$(awk -F= '/^[[:space:]]*innodb_log_file_size[[:space:]]*=/ { value=$2; gsub(/[[:space:]]/, "", value); print value; exit }' /etc/my.cnf)
+        case "${Redo_Log_File_Size}" in
+            *[mM]) Redo_Log_Capacity="$((${Redo_Log_File_Size%[mM]} * 2))M" ;;
+            *[gG]) Redo_Log_Capacity="$((${Redo_Log_File_Size%[gG]} * 2))G" ;;
+            *) Redo_Log_Capacity='100M' ;;
+        esac
+        sed -i '/^[[:space:]]*binlog_format[[:space:]]*=/d' /etc/my.cnf
+        sed -i '/^[[:space:]]*innodb_log_files_in_group[[:space:]]*=/d' /etc/my.cnf
+        sed -i "s#^[[:space:]]*innodb_log_file_size[[:space:]]*=.*#innodb_redo_log_capacity = ${Redo_Log_Capacity}#" /etc/my.cnf
     fi
 }
 

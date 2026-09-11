@@ -103,6 +103,9 @@ elif [[ "${PHPSelect}" =~ ^[456]$ ]]; then
 else
     PhpMyAdmin_Ver='phpMyAdmin-5.2.3-all-languages'
 fi
+if [ -n "${LNMP_PHPMYADMIN_VERSION_OVERRIDE:-}" ]; then
+    PhpMyAdmin_Ver="phpMyAdmin-${LNMP_PHPMYADMIN_VERSION_OVERRIDE}-all-languages"
+fi
 APR_Ver='apr-1.7.4'
 APR_Util_Ver='apr-util-1.6.3'
 if [ "${ApacheSelect}" = "1" ]; then

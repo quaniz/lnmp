@@ -60,12 +60,53 @@ Install_Only_Nginx()
     Check_Nginx_Files
 }
 
+Resolve_Harfbuzz_Library()
+{
+    ldconfig -p 2>/dev/null | awk '$1 == "libharfbuzz.so.0" { print $NF; exit }'
+}
+
+Resolve_Harfbuzz_Freetype()
+{
+    local Harfbuzz_Lib
+
+    Harfbuzz_Lib=$(Resolve_Harfbuzz_Library)
+    [ -n "${Harfbuzz_Lib}" ] || return 1
+    env -u LD_LIBRARY_PATH ldd "${Harfbuzz_Lib}" 2>/dev/null | \
+        awk '$1 ~ /^libfreetype\.so/ && $2 == "=>" { print $3; exit }'
+}
+
+Freetype_Has_Color_Glyph_Layer()
+{
+    local Freetype_Lib="$1"
+
+    [ -r "${Freetype_Lib}" ] || return 1
+    readelf --wide -Ws "${Freetype_Lib}" 2>/dev/null | \
+        awk '$8 ~ /^FT_Get_Color_Glyph_Layer(@@.*)?$/ { found=1 } END { exit !found }'
+}
+
+Resolve_Bundled_Freetype()
+{
+    local Freetype_Lib
+
+    for Freetype_Lib in /usr/local/freetype/lib/libfreetype.so.6 /usr/local/freetype/lib64/libfreetype.so.6; do
+        if [ -r "${Freetype_Lib}" ]; then
+            printf '%s\n' "${Freetype_Lib}"
+            return 0
+        fi
+    done
+    return 1
+}
+
 Use_System_Freetype()
 {
     local Freetype_Ld_Config='/etc/ld.so.conf.d/freetype.conf'
     local Freetype_Ld_Backup
     local Freetype_Pc_File='/usr/lib/pkgconfig/freetype2.pc'
     local Freetype_Pc_Backup
+    local Bundled_Freetype
+    local Bundled_Freetype_Lib_Dir
+    local Harfbuzz_Lib
+    local Runtime_Freetype
 
     Echo_Blue "Use the system FreeType for PHP 8..."
     if [ "$PM" = "yum" ]; then
@@ -92,7 +133,48 @@ Use_System_Freetype()
         Echo_Red "System FreeType/HarfBuzz development packages are unavailable."
         exit 1
     fi
-    LNMP_USE_SYSTEM_FREETYPE='y'
+
+    Harfbuzz_Lib=$(Resolve_Harfbuzz_Library)
+    Runtime_Freetype=$(Resolve_Harfbuzz_Freetype)
+    if [ -n "${Runtime_Freetype}" ] && Freetype_Has_Color_Glyph_Layer "${Runtime_Freetype}"; then
+        Echo_Green "FreeType/HarfBuzz ABI check passed: ${Runtime_Freetype}"
+        LNMP_USE_SYSTEM_FREETYPE='y'
+        unset LNMP_PHP_FREETYPE_LIBRARY_PATH
+        return 0
+    fi
+
+    # Some distributions can provide a HarfBuzz package built against
+    # FreeType >= 2.10 while the runtime loader still selects an older
+    # libfreetype.  PHP then reports this as an iconv errno failure because
+    # the iconv configure probe happens to execute the first affected binary.
+    Echo_Yellow "System FreeType/HarfBuzz ABI mismatch detected."
+    [ -n "${Runtime_Freetype}" ] && Echo_Yellow "Incompatible runtime library: ${Runtime_Freetype}"
+    Echo_Blue "Install a compatible bundled FreeType for PHP..."
+    LNMP_FORCE_NEW_FREETYPE='y'
+    LNMP_FREETYPE_DISABLE_HARFBUZZ='y'
+    Install_Freetype
+    unset LNMP_FORCE_NEW_FREETYPE
+    unset LNMP_FREETYPE_DISABLE_HARFBUZZ
+
+    Bundled_Freetype=$(Resolve_Bundled_Freetype)
+    if [ -z "${Bundled_Freetype}" ] || ! Freetype_Has_Color_Glyph_Layer "${Bundled_Freetype}"; then
+        Echo_Red "Bundled FreeType does not export FT_Get_Color_Glyph_Layer."
+        exit 1
+    fi
+    Bundled_Freetype_Lib_Dir=$(dirname "${Bundled_Freetype}")
+    if [ -z "${Harfbuzz_Lib}" ]; then
+        Echo_Red "Cannot resolve the system libharfbuzz.so.0 runtime path."
+        exit 1
+    fi
+    if env LD_LIBRARY_PATH="${Bundled_Freetype_Lib_Dir}" ldd -r "${Harfbuzz_Lib}" 2>&1 | grep -q 'undefined symbol: FT_Get_Color_Glyph_Layer'; then
+        Echo_Red "Bundled FreeType is still incompatible with the system HarfBuzz."
+        exit 1
+    fi
+
+    LNMP_USE_SYSTEM_FREETYPE='n'
+    LNMP_PHP_FREETYPE_LIBRARY_PATH="${Bundled_Freetype_Lib_Dir}"
+    export PKG_CONFIG_PATH="${Bundled_Freetype_Lib_Dir}/pkgconfig:${PKG_CONFIG_PATH:-}"
+    Echo_Green "Bundled FreeType ABI check passed."
 }
 
 Install_Only_PHP()
@@ -166,6 +248,84 @@ Install_Only_PHP()
     if [ "${isPHP}" = "ok" ]; then
         Echo_Green "Install ${Php_Ver} completed! enjoy it."
     fi
+}
+
+Install_Only_PhpMyAdmin()
+{
+    local PhpMyAdmin_Archive
+    local PhpMyAdmin_Backup
+    local PhpMyAdmin_Destination
+    local PhpMyAdmin_Secret
+    local PhpMyAdmin_Version
+
+    clear
+    echo "+-----------------------------------------------------------------------+"
+    echo "|                    Install phpMyAdmin for LNMP                        |"
+    echo "+-----------------------------------------------------------------------+"
+    echo "|       This only deploys phpMyAdmin; it installs no server services.  |"
+    echo "+-----------------------------------------------------------------------+"
+    Press_Install
+
+    PhpMyAdmin_Archive="${PhpMyAdmin_Ver}.tar.xz"
+    PhpMyAdmin_Destination="${Default_Website_Dir}/phpmyadmin"
+    PhpMyAdmin_Version="${PhpMyAdmin_Ver#phpMyAdmin-}"
+    PhpMyAdmin_Version="${PhpMyAdmin_Version%-all-languages}"
+
+    command -v tar >/dev/null 2>&1 || { Echo_Red "tar is required to install phpMyAdmin."; exit 1; }
+    mkdir -p "${cur_dir}/src" "${Default_Website_Dir}" || exit 1
+    cd "${cur_dir}/src" || exit 1
+
+    if [ ! -s "${PhpMyAdmin_Archive}" ]; then
+        Download_Files "https://files.phpmyadmin.net/phpMyAdmin/${PhpMyAdmin_Version}/${PhpMyAdmin_Archive}" "${PhpMyAdmin_Archive}"
+        if [ $? -ne 0 ] || [ ! -s "${PhpMyAdmin_Archive}" ]; then
+            Download_Files "${Download_Mirror}/datebase/phpmyadmin/${PhpMyAdmin_Archive}" "${PhpMyAdmin_Archive}"
+        fi
+    else
+        Echo_Green "${PhpMyAdmin_Archive} [found], using local archive."
+    fi
+    if [ ! -s "${PhpMyAdmin_Archive}" ]; then
+        Echo_Red "Unable to download ${PhpMyAdmin_Archive}."
+        exit 1
+    fi
+    if ! Verify_Download_File "${PhpMyAdmin_Archive}"; then
+        Echo_Red "Unable to verify ${PhpMyAdmin_Archive}."
+        exit 1
+    fi
+
+    Tar_Cd "${PhpMyAdmin_Archive}" "${PhpMyAdmin_Ver}"
+    cd "${cur_dir}/src" || exit 1
+
+    if [ -e "${PhpMyAdmin_Destination}" ]; then
+        PhpMyAdmin_Backup="${PhpMyAdmin_Destination}.backup.$(date +%Y%m%d%H%M%S)"
+        [ -e "${PhpMyAdmin_Backup}" ] && PhpMyAdmin_Backup="${PhpMyAdmin_Backup}.$$"
+        mv "${PhpMyAdmin_Destination}" "${PhpMyAdmin_Backup}" || exit 1
+        Echo_Yellow "Existing phpMyAdmin backed up to ${PhpMyAdmin_Backup}"
+    fi
+
+    mv "${PhpMyAdmin_Ver}" "${PhpMyAdmin_Destination}" || exit 1
+    \cp "${cur_dir}/conf/config.inc.php" "${PhpMyAdmin_Destination}/config.inc.php" || exit 1
+    if command -v openssl >/dev/null 2>&1; then
+        PhpMyAdmin_Secret=$(openssl rand -hex 16)
+    else
+        PhpMyAdmin_Secret="LNMP$(date +%s%N)${RANDOM}${RANDOM}${RANDOM}"
+        PhpMyAdmin_Secret="${PhpMyAdmin_Secret:0:32}"
+    fi
+    sed -i "s/LNMPORG/${PhpMyAdmin_Secret}/g" "${PhpMyAdmin_Destination}/config.inc.php" || exit 1
+    mkdir -p "${PhpMyAdmin_Destination}/upload" "${PhpMyAdmin_Destination}/save" || exit 1
+    printf '%s\n' "${PhpMyAdmin_Version}" > "${PhpMyAdmin_Destination}/.lnmp-version"
+    find "${PhpMyAdmin_Destination}" -type d -exec chmod 755 {} + || exit 1
+    find "${PhpMyAdmin_Destination}" -type f -exec chmod 644 {} + || exit 1
+
+    if id -u www >/dev/null 2>&1; then
+        chown -R www:www "${PhpMyAdmin_Destination}"
+    else
+        Echo_Yellow "User www does not exist; phpMyAdmin files remain owned by root."
+    fi
+    if [ ! -x /usr/local/php/bin/php ] && ! command -v php >/dev/null 2>&1; then
+        Echo_Yellow "PHP is not installed; phpMyAdmin is deployed but cannot run yet."
+    fi
+
+    Echo_Green "phpMyAdmin ${PhpMyAdmin_Version} installed to ${PhpMyAdmin_Destination}"
 }
 
 DB_Dependent()

@@ -186,10 +186,16 @@ Check_Apache_Files()
 Clean_DB_Src_Dir()
 {
     echo "Clean database src directory..."
+    # Installers often finish inside the extracted source/build directory.
+    # Leave it before removing it so later commands can still resolve $PWD.
+    cd "${cur_dir}" || exit 1
     if [[ "${DBSelect}" =~ ^(1|2|3|4|5|11)$ ]]; then
-        rm -rf ${cur_dir}/src/${Mysql_Ver}
+        rm -rf "${cur_dir}/src/${Mysql_Ver}"
+        if [ -n "${DB_ARCH:-}" ] && [ -d "${cur_dir}/src/${Mysql_Ver}-linux-glibc2.17-${DB_ARCH}" ]; then
+            rm -rf "${cur_dir}/src/${Mysql_Ver}-linux-glibc2.17-${DB_ARCH}"
+        fi
     elif [[ "${DBSelect}" =~ ^(6|7|8|9|10|12|13)$ ]]; then
-        rm -rf ${cur_dir}/src/${Mariadb_Ver}
+        rm -rf "${cur_dir}/src/${Mariadb_Ver}"
     fi
     if [[ "${DBSelect}" = "4" ]]; then
         [[ -d "${cur_dir}/src/${Boost_Ver}" ]] && rm -rf ${cur_dir}/src/${Boost_Ver}
@@ -201,12 +207,14 @@ Clean_DB_Src_Dir()
 Clean_PHP_Src_Dir()
 {
     echo "Clean PHP src directory..."
-    rm -rf ${cur_dir}/src/${Php_Ver}
+    cd "${cur_dir}" || exit 1
+    rm -rf "${cur_dir}/src/${Php_Ver}"
 }
 
 Clean_Web_Src_Dir()
 {
     echo "Clean Web Server src directory..."
+    cd "${cur_dir}" || exit 1
     if [ "${Stack}" = "lnmp" ]; then
         rm -rf ${cur_dir}/src/${Nginx_Ver}*
     elif [ "${Stack}" = "lnmpa" ]; then
