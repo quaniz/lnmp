@@ -138,5 +138,5 @@ Uninstall_Pureftpd()
 if [ "${action}" = "uninstall" ]; then
     Uninstall_Pureftpd
 else
-    Install_Pureftpd 2>&1 | tee /root/pureftpd-install.log
+    Run_Logged /root/pureftpd-install.log Install_Pureftpd
 fi

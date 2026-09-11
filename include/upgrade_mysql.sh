@@ -106,7 +106,7 @@ EOF
     fi
     MySQL_Opt
     if [ -d "${MySQL_Data_Dir}" ]; then
-        rm -rf ${MySQL_Data_Dir}/*
+        Safe_Clear_Directory "${MySQL_Data_Dir}"
     else
         mkdir -p ${MySQL_Data_Dir}
     fi
@@ -221,7 +221,7 @@ EOF
     fi
     MySQL_Opt
     if [ -d "${MySQL_Data_Dir}" ]; then
-        rm -rf ${MySQL_Data_Dir}/*
+        Safe_Clear_Directory "${MySQL_Data_Dir}"
     else
         mkdir -p ${MySQL_Data_Dir}
     fi
@@ -367,7 +367,7 @@ EOF
     fi
     MySQL_Opt
     if [ -d "${MySQL_Data_Dir}" ]; then
-        rm -rf ${MySQL_Data_Dir}/*
+        Safe_Clear_Directory "${MySQL_Data_Dir}"
     else
         mkdir -p ${MySQL_Data_Dir}
     fi
@@ -478,7 +478,7 @@ EOF
 
     MySQL_Opt
     if [ -d "${MySQL_Data_Dir}" ]; then
-        rm -rf ${MySQL_Data_Dir}/*
+        Safe_Clear_Directory "${MySQL_Data_Dir}"
     else
         mkdir -p ${MySQL_Data_Dir}
     fi
@@ -582,7 +582,7 @@ EOF
 
     MySQL_Opt
     if [ -d "${MySQL_Data_Dir}" ]; then
-        rm -rf ${MySQL_Data_Dir}/*
+        Safe_Clear_Directory "${MySQL_Data_Dir}"
     else
         mkdir -p ${MySQL_Data_Dir}
     fi
@@ -686,7 +686,7 @@ EOF
 
     MySQL_Opt
     if [ -d "${MySQL_Data_Dir}" ]; then
-        rm -rf ${MySQL_Data_Dir}/*
+        Safe_Clear_Directory "${MySQL_Data_Dir}"
     else
         mkdir -p ${MySQL_Data_Dir}
     fi
@@ -716,7 +716,10 @@ Restore_Start_MySQL()
     /etc/init.d/mysql start
 
     echo "Restore backup databases..."
-    /usr/local/mysql/bin/mysql --defaults-file=~/.my.cnf < /root/mysql_all_backup${Upgrade_Date}.sql
+    if ! /usr/local/mysql/bin/mysql --defaults-file=~/.my.cnf < /root/mysql_all_backup${Upgrade_Date}.sql; then
+        Echo_Red "Database restore failed. Backup retained at /root/mysql_all_backup${Upgrade_Date}.sql"
+        exit 1
+    fi
     echo "Repair databases..."
     MySQL_Ver_Com=$(${cur_dir}/include/version_compare 8.0.16 ${mysql_version})
     if [ "${MySQL_Ver_Com}" != "1" ]; then

@@ -9,7 +9,8 @@ Install_Apache_22()
         mkdir -p ${Default_Website_Dir}
         chmod +w ${Default_Website_Dir}
         mkdir -p /home/wwwlogs
-        chmod 777 /home/wwwlogs
+        chown www:www /home/wwwlogs
+        chmod 0750 /home/wwwlogs
         chown -R www:www ${Default_Website_Dir}
     fi
     Tar_Cd ${Apache_Ver}.tar.bz2 ${Apache_Ver}
@@ -67,7 +68,8 @@ Install_Apache_24()
         mkdir -p ${Default_Website_Dir}
         chmod +w ${Default_Website_Dir}
         mkdir -p /home/wwwlogs
-        chmod 777 /home/wwwlogs
+        chown www:www /home/wwwlogs
+        chmod 0750 /home/wwwlogs
         chown -R www:www ${Default_Website_Dir}
         Install_Openssl_New
         Install_Nghttp2

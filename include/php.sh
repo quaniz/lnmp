@@ -253,6 +253,40 @@ Pear_Pecl_Set()
     pecl config-set php_ini /usr/local/php/etc/php.ini
 }
 
+Install_Composer_Official()
+{
+    local Composer_Channel="${1:-current}"
+    local Composer_Setup
+    local Composer_Expected_Hash
+    local Composer_Actual_Hash
+    local Composer_Status
+
+    Composer_Setup=$(mktemp /tmp/composer-setup.XXXXXX.php) || return 1
+    Composer_Expected_Hash=$(curl -fsSL --connect-timeout 30 -m 60 https://composer.github.io/installer.sig) || {
+        rm -f "${Composer_Setup}"
+        return 1
+    }
+    if ! curl -fsSL --connect-timeout 30 -m 60 https://getcomposer.org/installer -o "${Composer_Setup}"; then
+        rm -f "${Composer_Setup}"
+        return 1
+    fi
+    Composer_Actual_Hash=$(/usr/local/php/bin/php -r 'echo hash_file("sha384", $argv[1]);' "${Composer_Setup}")
+    if [ -z "${Composer_Expected_Hash}" ] || [ "${Composer_Expected_Hash}" != "${Composer_Actual_Hash}" ]; then
+        Echo_Red "Composer installer signature verification failed."
+        rm -f "${Composer_Setup}"
+        return 1
+    fi
+
+    if [ "${Composer_Channel}" = "2.2" ]; then
+        /usr/local/php/bin/php "${Composer_Setup}" --install-dir=/usr/local/bin --filename=composer --2.2
+    else
+        /usr/local/php/bin/php "${Composer_Setup}" --install-dir=/usr/local/bin --filename=composer
+    fi
+    Composer_Status=$?
+    rm -f "${Composer_Setup}"
+    return ${Composer_Status}
+}
+
 Install_Composer()
 {
     local Composer_Local_File=""
@@ -291,7 +325,7 @@ Install_Composer()
                 chmod +x /usr/local/bin/composer
             else
                 echo "Composer install failed, try to from composer official website..."
-                curl -sS --connect-timeout 30 -m 60 https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer --2.2
+                Install_Composer_Official 2.2
                 if [ $? -eq 0 ]; then
                     echo "Composer install successfully."
                 fi
@@ -303,7 +337,7 @@ Install_Composer()
                 chmod +x /usr/local/bin/composer
             else
                 echo "Composer install failed, try to from composer official website..."
-                curl -sS --connect-timeout 30 -m 60 https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+                Install_Composer_Official current
                 if [ $? -eq 0 ]; then
                     echo "Composer install successfully."
                 fi

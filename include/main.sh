@@ -615,19 +615,62 @@ Apache_Selection()
 
 Kill_PM()
 {
-    if ps aux | grep -E "yum|dnf" | grep -qv "grep"; then
-        kill -9 $(ps -ef|grep -E "yum|dnf"|grep -v grep|awk '{print $2}')
-        if [ -s /var/run/yum.pid ]; then
-            rm -f /var/run/yum.pid
-        fi
-    elif ps aux | grep -E "apt-get|dpkg|apt" | grep -qv "grep"; then
-        kill -9 $(ps -ef|grep -E "apt-get|apt|dpkg"|grep -v grep|awk '{print $2}')
-        if [[ -s /var/lib/dpkg/lock-frontend || -s /var/lib/dpkg/lock ]]; then
-            rm -f /var/lib/dpkg/lock-frontend
-            rm -f /var/lib/dpkg/lock
-            dpkg --configure -a
-        fi
+    if ps -eo comm= | grep -Eq '^[[:space:]]*(yum|dnf|apt|apt-get|dpkg)[[:space:]]*$'; then
+        Echo_Red "Another package manager process is running."
+        Echo_Red "Wait for it to finish, then run the installer again."
+        exit 1
     fi
+}
+
+Run_Logged()
+{
+    local Log_File="$1"
+    local Command_Status
+    local Tee_Status
+    local Pipeline_Status
+    shift
+    "$@" 2>&1 | tee "${Log_File}"
+    Pipeline_Status=("${PIPESTATUS[@]}")
+    Command_Status=${Pipeline_Status[0]}
+    Tee_Status=${Pipeline_Status[1]}
+    [ ${Command_Status} -ne 0 ] && return ${Command_Status}
+    return ${Tee_Status}
+}
+
+Safe_Clear_Directory()
+{
+    local Target_Dir="${1:-}"
+    local Resolved_Dir
+
+    if [ -z "${Target_Dir}" ]; then
+        Echo_Red "Refusing to clear an empty directory path."
+        exit 1
+    fi
+    if command -v realpath >/dev/null 2>&1 && Resolved_Dir=$(realpath -m -- "${Target_Dir}" 2>/dev/null); then
+        :
+    elif command -v readlink >/dev/null 2>&1 && Resolved_Dir=$(readlink -m -- "${Target_Dir}" 2>/dev/null); then
+        :
+    elif [ -d "${Target_Dir}" ] && Resolved_Dir=$(cd "${Target_Dir}" 2>/dev/null && pwd -P); then
+        :
+    else
+        Echo_Red "realpath or readlink is required for safe directory cleanup."
+        exit 1
+    fi
+
+    case "${Resolved_Dir}" in
+        /|/bin|/boot|/dev|/etc|/home|/lib|/lib64|/opt|/proc|/root|/run|/sbin|/srv|/sys|/tmp|/usr|/usr/local|/var)
+            Echo_Red "Refusing to clear unsafe directory: ${Resolved_Dir}"
+            exit 1
+            ;;
+    esac
+    if [ ! -d "${Resolved_Dir}" ]; then
+        mkdir -p -- "${Resolved_Dir}" || exit 1
+        return 0
+    fi
+    find "${Resolved_Dir}" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + || {
+        Echo_Red "Failed to clear directory: ${Resolved_Dir}"
+        exit 1
+    }
 }
 
 Press_Install()
@@ -830,10 +873,16 @@ Verify_Download_File()
     local Actual_SHA256=""
 
     [ "${Enable_Download_Checksum}" != "y" ] && return 0
-    [ ! -s "${Checksum_File}" ] && return 0
+    if [ ! -s "${Checksum_File}" ]; then
+        Echo_Yellow "Warning: checksum manifest not found; ${FileName} cannot be verified."
+        return 0
+    fi
 
     Expected_SHA256=$(awk -v file="${FileName}" '$1 !~ /^#/ && $2 == file {print $1; exit}' "${Checksum_File}")
-    [ "${Expected_SHA256}" = "" ] && return 0
+    if [ "${Expected_SHA256}" = "" ]; then
+        Echo_Yellow "Warning: no checksum entry for ${FileName}; file cannot be verified."
+        return 0
+    fi
 
     if command -v sha256sum >/dev/null 2>&1; then
         Actual_SHA256=$(sha256sum "${FileName}" | awk '{print $1}')
@@ -878,18 +927,29 @@ Tar_Cd()
     local DirName=$2
     local extension=${FileName##*.}
     cd ${cur_dir}/src
+    if [ ! -s "${FileName}" ]; then
+        Echo_Red "Source archive is missing or empty: ${cur_dir}/src/${FileName}"
+        exit 1
+    fi
     [[ -d "${DirName}" ]] && rm -rf ${DirName}
     echo "Uncompress ${FileName}..."
     if [ "$extension" == "gz" ] || [ "$extension" == "tgz" ]; then
-        tar zxf "${FileName}"
+        tar zxf "${FileName}" || exit 1
     elif [ "$extension" == "bz2" ]; then
-        tar jxf "${FileName}"
+        tar jxf "${FileName}" || exit 1
     elif [ "$extension" == "xz" ]; then
-        tar Jxf "${FileName}"
+        tar Jxf "${FileName}" || exit 1
+    else
+        Echo_Red "Unsupported source archive format: ${FileName}"
+        exit 1
     fi
     if [ -n "${DirName}" ]; then
         echo "cd ${DirName}..."
-        cd ${DirName}
+        if [ ! -d "${DirName}" ]; then
+            Echo_Red "Expected source directory was not created: ${DirName}"
+            exit 1
+        fi
+        cd "${DirName}" || exit 1
     fi
 }
 

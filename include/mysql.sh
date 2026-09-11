@@ -177,13 +177,19 @@ MySQL_Opt()
 
 Check_MySQL_Data_Dir()
 {
+    local Backup_Dir
     if [ -d "${MySQL_Data_Dir}" ]; then
         datetime=$(date +"%Y%m%d%H%M%S")
-        mkdir -p /root/mysql-data-dir-backup${datetime}/
-        \cp ${MySQL_Data_Dir}/* /root/mysql-data-dir-backup${datetime}/
-        rm -rf ${MySQL_Data_Dir}/*
+        Backup_Dir="/root/mysql-data-dir-backup${datetime}"
+        mkdir -p "${Backup_Dir}" || exit 1
+        if ! \cp -a "${MySQL_Data_Dir}/." "${Backup_Dir}/"; then
+            Echo_Red "Failed to back up MySQL data; original directory was not cleared."
+            exit 1
+        fi
+        Echo_Green "MySQL data backed up to ${Backup_Dir}"
+        Safe_Clear_Directory "${MySQL_Data_Dir}"
     else
-        mkdir -p ${MySQL_Data_Dir}
+        mkdir -p "${MySQL_Data_Dir}" || exit 1
     fi
 }
 

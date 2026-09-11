@@ -125,37 +125,37 @@ Install_Multiplephp()
     Check_Openssl
 
     if [ "${PHPSelect}" = "1" ]; then
-        Install_MPHP5.2 2>&1 | tee /root/install-mphp5.2.log
+        Run_Logged /root/install-mphp5.2.log Install_MPHP5.2
     elif [ "${PHPSelect}" = "2" ]; then
-        Install_MPHP5.3 2>&1 | tee /root/install-mphp5.3.log
+        Run_Logged /root/install-mphp5.3.log Install_MPHP5.3
     elif [ "${PHPSelect}" = "3" ]; then
-        Install_MPHP5.4 2>&1 | tee /root/install-mphp5.4.log
+        Run_Logged /root/install-mphp5.4.log Install_MPHP5.4
     elif [ "${PHPSelect}" = "4" ]; then
-        Install_MPHP5.5 2>&1 | tee /root/install-mphp5.5.log
+        Run_Logged /root/install-mphp5.5.log Install_MPHP5.5
     elif [ "${PHPSelect}" = "5" ]; then
-        Install_MPHP5.6 2>&1 | tee /root/install-mphp5.6.log
+        Run_Logged /root/install-mphp5.6.log Install_MPHP5.6
     elif [ "${PHPSelect}" = "6" ]; then
-        Install_MPHP7.0 2>&1 | tee /root/install-mphp7.0.log
+        Run_Logged /root/install-mphp7.0.log Install_MPHP7.0
     elif [ "${PHPSelect}" = "7" ]; then
-        Install_MPHP7.1 2>&1 | tee /root/install-mphp7.1.log
+        Run_Logged /root/install-mphp7.1.log Install_MPHP7.1
     elif [ "${PHPSelect}" = "8" ]; then
-        Install_MPHP7.2 2>&1 | tee /root/install-mphp7.2.log
+        Run_Logged /root/install-mphp7.2.log Install_MPHP7.2
     elif [ "${PHPSelect}" = "9" ]; then
-        Install_MPHP7.3 2>&1 | tee /root/install-mphp7.3.log
+        Run_Logged /root/install-mphp7.3.log Install_MPHP7.3
     elif [ "${PHPSelect}" = "10" ]; then
-        Install_MPHP7.4 2>&1 | tee /root/install-mphp7.4.log
+        Run_Logged /root/install-mphp7.4.log Install_MPHP7.4
     elif [ "${PHPSelect}" = "11" ]; then
-        Install_MPHP8.0 2>&1 | tee /root/install-mphp8.0.log
+        Run_Logged /root/install-mphp8.0.log Install_MPHP8.0
     elif [ "${PHPSelect}" = "12" ]; then
-        Install_MPHP8.1 2>&1 | tee /root/install-mphp8.1.log
+        Run_Logged /root/install-mphp8.1.log Install_MPHP8.1
     elif [ "${PHPSelect}" = "13" ]; then
-        Install_MPHP8.2 2>&1 | tee /root/install-mphp8.2.log
+        Run_Logged /root/install-mphp8.2.log Install_MPHP8.2
     elif [ "${PHPSelect}" = "14" ]; then
-        Install_MPHP8.3 2>&1 | tee /root/install-mphp8.3.log
+        Run_Logged /root/install-mphp8.3.log Install_MPHP8.3
     elif [ "${PHPSelect}" = "15" ]; then
-        Install_MPHP8.4 2>&1 | tee /root/install-mphp8.4.log
+        Run_Logged /root/install-mphp8.4.log Install_MPHP8.4
     elif [ "${PHPSelect}" = "16" ]; then
-        Install_MPHP8.5 2>&1 | tee /root/install-mphp8.5.log
+        Run_Logged /root/install-mphp8.5.log Install_MPHP8.5
     fi
 }
 

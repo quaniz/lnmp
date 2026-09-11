@@ -247,7 +247,7 @@ EOF
     fi
     MySQL_Opt
     if [ -d "${MariaDB_Data_Dir}" ]; then
-        rm -rf ${MariaDB_Data_Dir}/*
+        Safe_Clear_Directory "${MariaDB_Data_Dir}"
     else
         mkdir -p ${MariaDB_Data_Dir}
     fi
@@ -262,8 +262,11 @@ EOF
     /etc/init.d/mariadb start
 
     echo "Restore backup databases..."
-    /usr/local/mariadb/bin/mysql --defaults-file=~/.my.cnf < /root/mysql_all_backup${Upgrade_Date}.sql
-    [ $? -eq 0 ] && echo "MariaDB databases import successfully." || echo "MariaDB databases import failed,Please import databases manually!"
+    if ! /usr/local/mariadb/bin/mysql --defaults-file=~/.my.cnf < /root/mysql_all_backup${Upgrade_Date}.sql; then
+        Echo_Red "MariaDB database restore failed. Backup retained at /root/mysql_all_backup${Upgrade_Date}.sql"
+        exit 1
+    fi
+    echo "MariaDB databases import successfully."
 
     echo "Repair databases..."
     /usr/local/mariadb/bin/mysql_upgrade -u root -p${DB_Root_Password}

@@ -540,11 +540,20 @@ Check_Download()
 
 Make_Install()
 {
-    make -j `grep 'processor' /proc/cpuinfo | wc -l`
-    if [ $? -ne 0 ]; then
-        make
+    local Make_Jobs
+    Make_Jobs=$(grep -c '^processor' /proc/cpuinfo 2>/dev/null)
+    [ "${Make_Jobs}" -gt 0 ] 2>/dev/null || Make_Jobs=1
+    if ! make -j "${Make_Jobs}"; then
+        Echo_Yellow "Parallel build failed; retrying with one job..."
+        if ! make; then
+            Echo_Red "Build failed. Source directory preserved: $(pwd)"
+            exit 1
+        fi
     fi
-    make install
+    if ! make install; then
+        Echo_Red "make install failed. Source directory preserved: $(pwd)"
+        exit 1
+    fi
 }
 
 PHP_Make_Install()
@@ -555,11 +564,20 @@ PHP_Make_Install()
         PHP_Make_Extra_Options="ZEND_EXTRA_LIBS=-liconv"
     fi
 
-    make ${PHP_Make_Extra_Options} -j `grep 'processor' /proc/cpuinfo | wc -l`
-    if [ $? -ne 0 ]; then
-        make ${PHP_Make_Extra_Options}
+    local Make_Jobs
+    Make_Jobs=$(grep -c '^processor' /proc/cpuinfo 2>/dev/null)
+    [ "${Make_Jobs}" -gt 0 ] 2>/dev/null || Make_Jobs=1
+    if ! make ${PHP_Make_Extra_Options} -j "${Make_Jobs}"; then
+        Echo_Yellow "Parallel PHP build failed; retrying with one job..."
+        if ! make ${PHP_Make_Extra_Options}; then
+            Echo_Red "PHP build failed. Source directory preserved: $(pwd)"
+            exit 1
+        fi
     fi
-    make install
+    if ! make install; then
+        Echo_Red "PHP make install failed. Source directory preserved: $(pwd)"
+        exit 1
+    fi
 }
 
 Install_Autoconf()

@@ -30,14 +30,6 @@ LNMP_Ver='2.2'
 
 Get_Dist_Name
 
-Run_Logged()
-{
-    local Log_File="$1"
-    shift
-    "$@" 2>&1 | tee "${Log_File}"
-    return ${PIPESTATUS[0]}
-}
-
 if [ "${DISTRO}" = "unknow" ]; then
     Echo_Red "Unable to get Linux distribution name, or do NOT support the current distribution."
     exit 1

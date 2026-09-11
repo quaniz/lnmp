@@ -32,6 +32,9 @@ LNMP 2.2 默认选择 MySQL 8.4 LTS 与 PHP 8.3，可选 PHP 8.4/8.5、MariaDB 1
 lnmp.conf配置文件，可以修改lnmp.conf自定义下载服务器地址、网站/数据库目录及添加nginx模块和php编译参数；不论安装升级都会调用该文件里的设置(如果修改了默认的参数建议备份此文件)；
 安装PHP时如需离线安装Composer，可预先将旧版PHP使用的文件保存为 `src/composer-2.2.phar`；新版PHP优先使用 `src/composer.phar`，没有时也可回退使用 `src/composer-2.2.phar`。检测到非空的本地文件后会直接安装，不再下载Composer。
 PHP 编译会在执行前打印变量展开后的完整 `./configure` 命令；单独安装PHP时记录到 `/root/php-install.log`。如 `configure` 失败，安装会立即停止、保留源码，并将完整日志复制到安装包根目录的 `php-configure-error.log`。
+所有核心安装和升级日志都会保留原命令的退出状态；下载文件缺失、解压失败、编译失败或 `make install` 失败时会立即停止并保留源码目录。检测到其他 yum/dnf/apt/dpkg 进程时安装器会安全退出，不再强制终止进程或删除包管理器锁文件。
+清理 MySQL/MariaDB 数据目录前会规范化并检查路径；空路径和系统关键目录会被拒绝。首次安装发现已有数据时，必须先用 `cp -a` 完整备份成功后才会清理。数据库升级时 SQL 恢复失败会立即停止并保留备份。
+启用下载校验但缺少 `src/checksums.sha256` 或对应条目时会显示明确警告；Composer 官方安装器会先进行 SHA-384 签名验证，不再通过 `curl | php` 直接执行。
 详细参数说明可以 https://lnmp.org/faq/lnmp-software-list.html#lnmp.conf 查看；
 
 FTP服务器

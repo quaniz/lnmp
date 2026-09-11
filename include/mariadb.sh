@@ -91,13 +91,19 @@ EOF
 
 Check_MariaDB_Data_Dir()
 {
+    local Backup_Dir
     if [ -d "${MariaDB_Data_Dir}" ]; then
         datetime=$(date +"%Y%m%d%H%M%S")
-        mkdir /root/mariadb-data-dir-backup${datetime}/
-        \cp ${MariaDB_Data_Dir}/* /root/mariadb-data-dir-backup${datetime}/
-        rm -rf ${MariaDB_Data_Dir}/*
+        Backup_Dir="/root/mariadb-data-dir-backup${datetime}"
+        mkdir -p "${Backup_Dir}" || exit 1
+        if ! \cp -a "${MariaDB_Data_Dir}/." "${Backup_Dir}/"; then
+            Echo_Red "Failed to back up MariaDB data; original directory was not cleared."
+            exit 1
+        fi
+        Echo_Green "MariaDB data backed up to ${Backup_Dir}"
+        Safe_Clear_Directory "${MariaDB_Data_Dir}"
     else
-        mkdir -p ${MariaDB_Data_Dir}
+        mkdir -p "${MariaDB_Data_Dir}" || exit 1
     fi
 }
 
