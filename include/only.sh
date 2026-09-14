@@ -328,6 +328,125 @@ Install_Only_PhpMyAdmin()
     Echo_Green "phpMyAdmin ${PhpMyAdmin_Version} installed to ${PhpMyAdmin_Destination}"
 }
 
+Install_Only_Acme()
+{
+    local Acme_Archive="acme.sh-latest.tar.gz"
+    local Acme_Archive_Path=""
+    local Acme_Cert_Home="${LNMP_ACME_CERT_HOME:-/usr/local/nginx/conf/ssl}"
+    local Acme_Email="${LNMP_ACME_EMAIL:-}"
+    local Acme_Installer=""
+    local Acme_Source_Dir=""
+    local Acme_Sudo_Option=""
+    local Acme_Work_Dir=""
+    local Candidate=""
+
+    clear
+    echo "+-----------------------------------------------------------------------+"
+    echo "|                       Install acme.sh                                 |"
+    echo "+-----------------------------------------------------------------------+"
+    echo "|       This only installs acme.sh; it does not issue certificates.    |"
+    echo "+-----------------------------------------------------------------------+"
+    Press_Install
+
+    if [ "${Acme_Email}" = "" ]; then
+        Echo_Red "LNMP_ACME_EMAIL is required."
+        exit 1
+    fi
+    if ! [[ "${Acme_Email}" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}$ ]]; then
+        Echo_Red "Invalid ACME account email: ${Acme_Email}"
+        exit 1
+    fi
+
+    if [ -s /usr/local/acme.sh/acme.sh ]; then
+        Echo_Green "acme.sh is already installed at /usr/local/acme.sh/acme.sh"
+        if [ ! -s /usr/local/acme.sh/account.conf ] || ! grep -Eq '^ACCOUNT_EMAIL=' /usr/local/acme.sh/account.conf; then
+            /usr/local/acme.sh/acme.sh --register-account -m "${Acme_Email}" || exit 1
+        fi
+        return 0
+    fi
+
+    command -v tar >/dev/null 2>&1 || { Echo_Red "tar is required to install acme.sh."; exit 1; }
+    command -v openssl >/dev/null 2>&1 || { Echo_Red "openssl is required to install acme.sh."; exit 1; }
+    mkdir -p "${cur_dir}/src" "${Acme_Cert_Home}" || exit 1
+
+    for Candidate in \
+        "${cur_dir}/src/${Acme_Archive}" \
+        "${cur_dir}/src/latest.tar.gz"; do
+        if [ -s "${Candidate}" ]; then
+            Acme_Archive_Path="${Candidate}"
+            break
+        fi
+    done
+    if [ "${Acme_Archive_Path}" = "" ]; then
+        Candidate=$(find "${cur_dir}/src" -maxdepth 1 -type f -name 'acme.sh-*.tar.gz' -size +0c | LC_ALL=C sort | tail -n 1)
+        [ -n "${Candidate}" ] && Acme_Archive_Path="${Candidate}"
+    fi
+
+    if [ "${Acme_Archive_Path}" = "" ]; then
+        cd "${cur_dir}/src" || exit 1
+        Download_Files "https://soft.vpser.net/lib/acme.sh/latest.tar.gz" "${Acme_Archive}"
+        if [ $? -ne 0 ] || [ ! -s "${Acme_Archive}" ]; then
+            Echo_Red "Unable to download ${Acme_Archive}."
+            exit 1
+        fi
+        Acme_Archive_Path="${cur_dir}/src/${Acme_Archive}"
+    else
+        Echo_Green "${Acme_Archive_Path##*/} [found], using local archive."
+    fi
+
+    cd "${cur_dir}/src" || exit 1
+    if ! Verify_Download_File "${Acme_Archive_Path##*/}"; then
+        Echo_Red "Unable to verify ${Acme_Archive_Path}."
+        exit 1
+    fi
+
+    Acme_Work_Dir=$(mktemp -d "${cur_dir}/src/.acme-install.XXXXXX") || exit 1
+    if ! tar zxf "${Acme_Archive_Path}" -C "${Acme_Work_Dir}"; then
+        rm -rf "${Acme_Work_Dir}"
+        Echo_Red "Unable to extract ${Acme_Archive_Path}."
+        exit 1
+    fi
+    Acme_Installer=$(find "${Acme_Work_Dir}" -mindepth 1 -maxdepth 3 -type f -name acme.sh | head -n 1)
+    if [ "${Acme_Installer}" = "" ]; then
+        rm -rf "${Acme_Work_Dir}"
+        Echo_Red "acme.sh installer was not found in ${Acme_Archive_Path}."
+        exit 1
+    fi
+    Acme_Source_Dir=${Acme_Installer%/*}
+    if env | grep -q '^SUDO_'; then
+        Acme_Sudo_Option="-f"
+    fi
+
+    cd "${Acme_Source_Dir}" || exit 1
+    sh ./acme.sh --install ${Acme_Sudo_Option} --log \
+        --home /usr/local/acme.sh \
+        --certhome "${Acme_Cert_Home}" \
+        -m "${Acme_Email}"
+    if [ $? -ne 0 ] || [ ! -s /usr/local/acme.sh/acme.sh ]; then
+        cd "${cur_dir}" || exit 1
+        rm -rf "${Acme_Work_Dir}"
+        Echo_Red "acme.sh installation failed."
+        exit 1
+    fi
+    cd "${cur_dir}" || exit 1
+    rm -rf "${Acme_Work_Dir}"
+
+    sed -i 's/cat "\$CERT_PATH"$/#cat "\$CERT_PATH"/g' /usr/local/acme.sh/acme.sh
+    cat > /usr/local/acme.sh/upgrade.sh <<'EOF'
+#!/bin/bash
+
+. "/usr/local/acme.sh/acme.sh.env"
+/usr/local/acme.sh/acme.sh --upgrade
+sed -i 's/cat "\$CERT_PATH"$/#cat "\$CERT_PATH"/g' /usr/local/acme.sh/acme.sh
+sed -i 's/DEFAULT_ACCOUNT_KEY_LENGTH=ec-256/DEFAULT_ACCOUNT_KEY_LENGTH=2048/g' /usr/local/acme.sh/acme.sh
+sed -i 's/DEFAULT_DOMAIN_KEY_LENGTH=ec-256/DEFAULT_DOMAIN_KEY_LENGTH=2048/g' /usr/local/acme.sh/acme.sh
+EOF
+    chmod 0755 /usr/local/acme.sh/upgrade.sh
+
+    Echo_Green "acme.sh installed to /usr/local/acme.sh"
+    Echo_Green "Certificate home: ${Acme_Cert_Home}"
+}
+
 DB_Dependent()
 {
     if [ "$PM" = "yum" ]; then

@@ -1267,6 +1267,18 @@ EOF
 
 Create_SSL_Config()
 {
+    local Nginx_Http2_Directive=""
+    local Nginx_Https_Listen="listen 443 ssl http2;"
+    local Nginx_Https_Listen_IPv6="#listen [::]:443 ssl http2;"
+    local Nginx_Running_Version=""
+
+    Nginx_Running_Version=$(/usr/local/nginx/sbin/nginx -v 2>&1 | sed -n 's#^nginx version: nginx/\([0-9][0-9.]*\).*$#\1#p')
+    if [ -n "${Nginx_Running_Version}" ] && printf '%s\n' "${Nginx_Running_Version}" | awk -F. '{ exit !(($1 > 1) || ($1 == 1 && (($2 > 25) || ($2 == 25 && $3 >= 1)))) }'; then
+        Nginx_Https_Listen="listen 443 ssl;"
+        Nginx_Https_Listen_IPv6="#listen [::]:443 ssl;"
+        Nginx_Http2_Directive="http2 on;"
+    fi
+
     if [ ! -s /usr/local/nginx/conf/ssl/dhparam.pem ]; then
         echo "Create dhparam.pem..."
         mkdir -p /usr/local/nginx/conf/ssl/
@@ -1277,8 +1289,9 @@ Create_SSL_Config()
 
 server
     {
-        listen 443 ssl http2;
-        #listen [::]:443 ssl http2;
+        ${Nginx_Https_Listen}
+        ${Nginx_Https_Listen_IPv6}
+        ${Nginx_Http2_Directive}
         server_name ${domain} ${moredomain};
         index index.html index.htm index.php default.html default.htm default.php;
         root  ${vhostdir};
@@ -1330,7 +1343,7 @@ EOF
     fi
 
     if [ "${enable_ipv6}" == "y" ]; then
-        sed -i 's/#listen \[::\]:443 ssl http2;/listen \[::\]:443 ssl http2;/g' /usr/local/nginx/conf/vhost/${domain}.conf
+        sed -i 's/#listen \[::\]:443 ssl/listen [::]:443 ssl/g' /usr/local/nginx/conf/vhost/${domain}.conf
     fi
 
     echo "Test Nginx configure file......"

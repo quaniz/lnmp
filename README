@@ -81,6 +81,7 @@ Sodium加密库扩展模块安装/卸载执行：./addons.sh {install|uninstall}
 其他常用脚本：
 * 仅安装管理命令：执行 `./install-component.sh lnmp`，只会安装 `/bin/lnmp` 命令，不会安装 MySQL、PHP、Nginx 或相关依赖。
 * 指定版本安装：执行 `./install-component.sh <mysql|php|nginx|phpmyadmin> <版本号>`，例如 `./install-component.sh mysql 8.4.8 --binary`、`./install-component.sh php 8.3.30`、`./install-component.sh nginx 1.28.0` 或 `./install-component.sh phpmyadmin 5.2.3`。版本号必须为 `x.y.z` 格式；可先增加 `--dry-run` 检查参数，增加 `-y` 跳过最终按键确认。PHP 会作为主 PHP-FPM 服务安装到 `/usr/local/php`，除旧版 PHP 5.2 外，不要求预先安装 MySQL 或 Nginx。phpMyAdmin 只部署到默认网站目录，不会自动安装 PHP、数据库或 Web 服务；已有 phpMyAdmin 会先改名备份。
+* 单独安装 ACME：执行 `./install-component.sh acme admin@example.com`（也可使用 `--email admin@example.com`）。只安装 `acme.sh`，不会申请证书，也不会安装 MySQL、PHP 或 Nginx；优先使用 `src/acme.sh-latest.tar.gz`、`src/latest.tar.gz` 或 `src/acme.sh-*.tar.gz` 本地安装包。
 * 安装状态检查：执行 `./install-component.sh status`，无需 root 权限，可检查 lnmp 管理命令以及 MySQL/MariaDB、PHP、Nginx 的安装路径和版本。
 * 本地软件包检查：执行 `./install-component.sh sources`（或 `./install-component.sh src`），无需 root 权限，可列出 `src` 顶层缓存的软件名称、版本、大小和文件名；大小显示为 `EMPTY` 的文件表示下载未完成，安装时不会作为有效缓存使用。
 * MySQL 8.4 使用 `innodb_redo_log_capacity` 并采用默认 ROW binlog 格式，不再写入已废弃的 `innodb_log_file_size`、`innodb_log_files_in_group` 和 `binlog_format`。数据库安全初始化与源码清理可重复执行，不会因匿名用户、测试库已不存在或删除当前工作目录而产生误报。

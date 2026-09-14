@@ -8,6 +8,7 @@ usage()
 {
     cat <<'EOF'
 Usage: ./install-component.sh <mysql|php|nginx|phpmyadmin> <version> [options]
+       ./install-component.sh acme <email> [options]
        ./install-component.sh lnmp [--dry-run]
        ./install-component.sh status
        ./install-component.sh sources
@@ -17,6 +18,7 @@ Examples:
   ./install-component.sh mysql 8.4.8 --binary
   ./install-component.sh php 8.3.30
   ./install-component.sh phpmyadmin 5.2.3
+  ./install-component.sh acme admin@example.com
   ./install-component.sh lnmp
   ./install-component.sh status
   ./install-component.sh sources
@@ -26,6 +28,7 @@ Options:
   -y, --yes       Skip the final key-press confirmation.
   --binary        Install a MySQL generic binary package when supported.
   --source        Compile MySQL from source.
+  --email EMAIL   ACME account email (alternative to the positional email).
   --dry-run       Print the resolved installation settings without installing.
   -h, --help      Show this help message.
 
@@ -35,6 +38,7 @@ The sources target lists locally cached software archives in src; it changes not
 PHP is installed as the main PHP-FPM service and does not require MySQL or Nginx.
 PHP 5.2 is the exception and still requires MySQL because of its legacy build options.
 phpMyAdmin only deploys its web files; it does not install PHP, MySQL, or Nginx.
+ACME only installs acme.sh; it does not issue a certificate or install server services.
 Supported MySQL series: 5.1, 5.5, 5.6, 5.7, 8.0, 8.4.
 Supported PHP series:   5.2-5.6, 7.0-7.4, 8.0-8.5.
 phpMyAdmin versions use the x.y.z format, for example 5.2.3.
@@ -105,6 +109,7 @@ print_source_inventory()
             mariadb-*) Software='MariaDB' ;;
             php-*) Software='PHP' ;;
             nginx-*) Software='Nginx' ;;
+            acme.sh-*|latest) Software='acme.sh'; [ "${Version}" = 'unknown' ] && Version='latest' ;;
             composer*) Software='Composer'; [ "${Version}" = 'unknown' ] && Version='current' ;;
             boost_*) Software='Boost' ;;
             icu4c-*) Software='ICU' ;;
@@ -144,9 +149,16 @@ fi
 
 component=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
 shift
+[ "$component" = 'acme.sh' ] && component=acme
 
 version=
-if [ "$component" != lnmp ] && [ "$component" != status ] && [ "$component" != sources ] && [ "$component" != src ]; then
+acme_email=${LNMP_ACME_EMAIL:-}
+if [ "$component" = acme ]; then
+    if [ $# -gt 0 ] && [[ "$1" != -* ]]; then
+        acme_email=$1
+        shift
+    fi
+elif [ "$component" != lnmp ] && [ "$component" != status ] && [ "$component" != sources ] && [ "$component" != src ]; then
     [ $# -ge 1 ] || die "A version is required for $component."
     version=$1
     shift
@@ -169,6 +181,12 @@ while [ $# -gt 0 ]; do
             [ -z "$binary_mode" ] || die "--binary and --source cannot be used together."
             binary_mode=n
             ;;
+        --email)
+            [ "$component" = acme ] || die "--email only applies to ACME."
+            [ $# -ge 2 ] || die "--email requires an email address."
+            acme_email=$2
+            shift
+            ;;
         --dry-run)
             dry_run=y
             ;;
@@ -186,6 +204,11 @@ done
 if [ -n "$version" ]; then
     [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
         die "Version must use the x.y.z format, for example 8.4.8."
+fi
+if [ "$component" = acme ]; then
+    [ -n "$acme_email" ] || die "An account email is required, for example: ./install-component.sh acme admin@example.com"
+    [[ "$acme_email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}$ ]] || \
+        die "Invalid ACME account email: $acme_email"
 fi
 
 selector=
@@ -258,8 +281,12 @@ case "$component" in
         installer_action=phpmyadmin
         override_name=LNMP_PHPMYADMIN_VERSION_OVERRIDE
         ;;
+    acme)
+        [ -z "$binary_mode" ] || die "--binary/--source only apply to MySQL."
+        installer_action=acme
+        ;;
     *)
-        die "Unsupported component '$component'. Use lnmp, status, mysql, php, nginx, or phpmyadmin."
+        die "Unsupported component '$component'. Use lnmp, status, sources, mysql, php, nginx, phpmyadmin, or acme."
         ;;
 esac
 
@@ -269,6 +296,9 @@ if [ -n "$version" ]; then
 fi
 if [ -n "$selector" ]; then
     echo "Selector:  $selector"
+fi
+if [ "$component" = acme ]; then
+    echo "Email:     $acme_email"
 fi
 if [ "$component" = mysql ]; then
     case "$binary_mode" in
@@ -307,6 +337,12 @@ if [ "$component" = status ]; then
 
     print_binary_version php /usr/local/php/bin/php -r 'echo PHP_VERSION;'
     print_binary_version nginx /usr/local/nginx/sbin/nginx -v
+    if [ -x /usr/local/acme.sh/acme.sh ]; then
+        Acme_Version=$(/usr/local/acme.sh/acme.sh --version 2>&1 | tail -n 1)
+        printf '%-9s %s\n' 'acme.sh:' "${Acme_Version:-installed (/usr/local/acme.sh/acme.sh)}"
+    else
+        printf '%-9s %s\n' 'acme.sh:' 'not installed'
+    fi
     if [ -s "${script_dir}/lnmp.conf" ]; then
         Default_Website_Dir=$(awk -F"'" '/^Default_Website_Dir=/ {print $2; exit}' "${script_dir}/lnmp.conf")
         if [ -s "${Default_Website_Dir}/phpmyadmin/.lnmp-version" ]; then
@@ -330,7 +366,8 @@ if [ "$component" = lnmp ]; then
     exit 0
 fi
 
-export "$override_name=$version"
+[ -n "$override_name" ] && export "$override_name=$version"
+[ "$component" = acme ] && export LNMP_ACME_EMAIL="$acme_email"
 [ "$auto_install" = y ] && export LNMP_Auto=y
 [ -n "$binary_mode" ] && export Bin="$binary_mode"
 
